@@ -1,0 +1,24 @@
+<html>
+  <head>
+    <script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie@beta/dist/js.cookie.min.js"></script>
+    <script src='index.js'></script>
+    <!--<style>
+      #gameCanvas {
+        image-rendering: pixelated;
+        transform-origin: 0 0;
+        transform: scale(10);
+        border: 1px solid;
+      }
+    </style>-->
+  </head>
+  <body>
+    <!--<canvas id="gameCanvas" height="60" width="95"></canvas>-->
+    <div id="elm"></div>
+    <script>
+      var app = Elm.Main.init({
+        node: document.getElementById('elm')
+      }); 
+    </script>
+  </body>
+</html>
