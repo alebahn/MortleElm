@@ -164,6 +164,9 @@ levels = Array.map (\listList -> Array.map Array.fromList (Array.fromList listLi
 aimLength : Float
 aimLength = 6
 
+angleDelta : Float
+angleDelta = pi / 32
+
 -- MAIN
 
 main : Program () Model Msg
@@ -179,6 +182,7 @@ subscriptions model =
   case model.state of
     Menu _ -> onKeyDown (Decode.map keyToMenuMsg (Decode.field "key" Decode.string))
     Aim _ -> onKeyDown (Decode.map keyToAimMsg (Decode.field "key" Decode.string))
+    Launch _ -> Debug.todo "Launch Subscriptions"
 
 keyToMenuMsg : String -> Msg
 keyToMenuMsg key =
@@ -192,7 +196,15 @@ keyToMenuMsg key =
     KeyOther
 
 keyToAimMsg : String -> Msg
-keyToAimMsg key = KeyOther
+keyToAimMsg key =
+  if key == "ArrowLeft" then
+    AimLeft
+  else if key == "ArrowRight" then
+    AimRight
+  else if key == "ArrowUp" || key == "Enter" || key == "Enter" || key == " " then
+    AimLaunch
+  else
+    KeyOther
 
 -- MODEL
 type alias Model = { state : GameState
@@ -200,11 +212,17 @@ type alias Model = { state : GameState
                    }
 type GameState = Menu MenuSelection
                | Aim AimModel
+               | Launch LaunchModel
 type MenuSelection = NewGame | Continue
 type alias AimModel = { level : Int
                       , currentPosition : Point
                       , aimAngle : Float
                       }
+type alias LaunchModel = { level : Int
+                         , currentPosition : Point
+                         , velocityX : Float
+                         , velocityY : Float
+                         }
 
 init : () -> (Model, Cmd Msg)
 init _ =
@@ -216,6 +234,9 @@ type Msg
   = MenuDown
   | MenuUp
   | MenuAccept
+  | AimLeft
+  | AimRight
+  | AimLaunch
   | KeyOther
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -226,7 +247,12 @@ update msg model =
        MenuDown -> ({ model | state = Menu Continue }, Cmd.none)
        MenuAccept -> ({ model | state = Aim (AimModel model.startLevel (2, 58) 0) }, Cmd.none)
        _ -> (model, Cmd.none)
-    Aim aimModel -> (model, Cmd.none)
+    Aim aimModel -> case msg of
+      AimLeft -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle - angleDelta }}, Cmd.none)
+      AimRight -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle + angleDelta }}, Cmd.none)
+      AimLaunch -> ({ model | state = Launch (LaunchModel aimModel.level aimModel.currentPosition (sin aimModel.aimAngle) -(cos aimModel.aimAngle)) }, Cmd.none)
+      _ -> (model, Cmd.none)
+    Launch _ -> Debug.todo "a"
 
 -- VIEW
 width : Int
@@ -252,6 +278,7 @@ background model =
               , text [ gameFont ] (4, 24) "New Game"
               , text [ gameFont ] (4, 32) "Continue" ]
     Aim aimModel -> drawLevel aimModel.level
+    Launch launchModel -> Debug.todo "draw launch background"
 
 drawLevel : Int -> List Canvas.Renderable
 drawLevel levelNum = case Array.get levelNum levels of
@@ -276,6 +303,7 @@ foreground model =
   case model.state of
      Menu menuSelection -> [ text [ gameFont ] (72, getYCoordinateFromMenuSelection menuSelection) "<" ]
      Aim aimModel -> drawMortle aimModel
+     Launch launchModel -> Debug.todo "draw launch"
 
 getYCoordinateFromMenuSelection : MenuSelection -> Float
 getYCoordinateFromMenuSelection menuSelection =
