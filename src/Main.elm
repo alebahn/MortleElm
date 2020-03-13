@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Array exposing (Array)
 import Browser
-import Browser.Events exposing (onKeyDown)
+import Browser.Events exposing (onKeyDown, onAnimationFrame)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Canvas exposing (clear, shapes, rect, text, Point)
@@ -161,11 +161,19 @@ levels = Array.map (\listList -> Array.map Array.fromList (Array.fromList listLi
     ]
   ])
 
+-- CONSTANTS
+
 aimLength : Float
 aimLength = 6
 
 angleDelta : Float
 angleDelta = pi / 32
+
+airResistance : Float
+airResistance = 0.9756
+
+gravity : Float
+gravity = 0.025
 
 -- MAIN
 
@@ -182,7 +190,7 @@ subscriptions model =
   case model.state of
     Menu _ -> onKeyDown (Decode.map keyToMenuMsg (Decode.field "key" Decode.string))
     Aim _ -> onKeyDown (Decode.map keyToAimMsg (Decode.field "key" Decode.string))
-    Launch _ -> Debug.todo "Launch Subscriptions"
+    Launch _ -> onAnimationFrame (\_ -> Frame)
 
 keyToMenuMsg : String -> Msg
 keyToMenuMsg key =
@@ -222,6 +230,7 @@ type alias LaunchModel = { level : Int
                          , currentPosition : Point
                          , velocityX : Float
                          , velocityY : Float
+                         , aimAngle : Float
                          }
 
 init : () -> (Model, Cmd Msg)
@@ -238,6 +247,7 @@ type Msg
   | AimRight
   | AimLaunch
   | KeyOther
+  | Frame
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -250,9 +260,64 @@ update msg model =
     Aim aimModel -> case msg of
       AimLeft -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle - angleDelta }}, Cmd.none)
       AimRight -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle + angleDelta }}, Cmd.none)
-      AimLaunch -> ({ model | state = Launch (LaunchModel aimModel.level aimModel.currentPosition (sin aimModel.aimAngle) -(cos aimModel.aimAngle)) }, Cmd.none)
+      AimLaunch -> ({ model | state = Launch (LaunchModel aimModel.level aimModel.currentPosition (sin aimModel.aimAngle) -(cos aimModel.aimAngle) aimModel.aimAngle) }, Cmd.none)
       _ -> (model, Cmd.none)
-    Launch _ -> Debug.todo "a"
+    Launch launchModel -> case msg of
+      Frame ->
+        let
+          (currentX, currentY) = launchModel.currentPosition
+          level = launchModel.level
+        in
+          if currentX >= 90 && currentY >= 55 then
+            (advanceToNextLevel model launchModel, Cmd.none)
+          else if checkCollision level (currentX, currentY + 1) then
+            ({ model | state = Aim (AimModel level (roundPoint (currentX, currentY - 1)) launchModel.aimAngle) }, Cmd.none)
+          else
+            let
+              launchModelPrime =
+                if (checkCollision level (currentX, currentY - 1) && launchModel.velocityY < 0) then
+                  { launchModel | velocityX = 0, velocityY = 0 }
+                else if ((checkCollision level (currentX - 1, currentY)) && launchModel.velocityX < 0 ) ||
+                        ((checkCollision level (currentX + 1, currentY)) && launchModel.velocityX > 0) then
+                  { launchModel | velocityX = -launchModel.velocityX }
+                else launchModel
+            in
+              ({ model | state = Launch { launchModelPrime | currentPosition = (currentX + launchModelPrime.velocityX, currentY + launchModelPrime.velocityY)
+                                                           , velocityY = (launchModelPrime.velocityY + gravity) * airResistance }
+              }, Cmd.none)
+      _ -> (model, Cmd.none)
+
+advanceToNextLevel : Model -> LaunchModel -> Model
+advanceToNextLevel model launchModel = { model | state = Aim (AimModel (launchModel.level + 1) (2, 58) launchModel.aimAngle) }
+
+checkCollision : Int -> Point -> Bool
+checkCollision level (floatX, floatY) =
+  let
+    x = round floatX
+    y = round floatY
+  in
+    case Array.get level levels of
+      Nothing -> True
+      Just levelData ->
+        if x < 0 then
+          True
+        else if x >= 95 then
+          True
+        else if y < 0 then
+          True
+        else if y >= 60 then
+          True
+        else
+          let
+            row = floor (toFloat y / 5)
+            col = floor (toFloat x / 5)
+          in
+            case Array.get row levelData of
+              Nothing -> True
+              Just rowData ->
+                case Array.get col rowData of
+                  Nothing -> True
+                  Just cell -> cell
 
 -- VIEW
 width : Int
@@ -278,7 +343,7 @@ background model =
               , text [ gameFont ] (4, 24) "New Game"
               , text [ gameFont ] (4, 32) "Continue" ]
     Aim aimModel -> drawLevel aimModel.level
-    Launch launchModel -> Debug.todo "draw launch background"
+    Launch launchModel -> drawLevel launchModel.level
 
 drawLevel : Int -> List Canvas.Renderable
 drawLevel levelNum = case Array.get levelNum levels of
@@ -303,7 +368,7 @@ foreground model =
   case model.state of
      Menu menuSelection -> [ text [ gameFont ] (72, getYCoordinateFromMenuSelection menuSelection) "<" ]
      Aim aimModel -> drawMortle aimModel
-     Launch launchModel -> Debug.todo "draw launch"
+     Launch launchModel -> [ shapes [ fill Color.black ] [ rect (roundPoint launchModel.currentPosition) 1 1 ] ]
 
 getYCoordinateFromMenuSelection : MenuSelection -> Float
 getYCoordinateFromMenuSelection menuSelection =
@@ -322,6 +387,9 @@ drawMortle aimModel =
     shapes [ fill Color.black ] [ rect (posX - 1, posY - 1) 3 3 ] ::
     drawLine posX posY endX endY
 
+roundPoint : Point -> Point
+roundPoint (x, y) = (toFloat (round x), toFloat (round y))
+
 drawLine : Float -> Float -> Float -> Float -> List Canvas.Renderable
 drawLine x0 y0 x1 y1 =
   let
@@ -335,7 +403,7 @@ drawLine x0 y0 x1 y1 =
 
 drawLineCore : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> List Canvas.Renderable
 drawLineCore x0 y0 x1 y1 dx dy sx sy err =
-  (invertPixel x0 y0) ::
+  invertPixel x0 y0 ::
   if (x0 == x1) && (y0 == y1)
     then
       []
