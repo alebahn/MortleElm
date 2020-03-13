@@ -191,6 +191,7 @@ subscriptions model =
     Menu _ -> onKeyDown (Decode.map keyToMenuMsg (Decode.field "key" Decode.string))
     Aim _ -> onKeyDown (Decode.map keyToAimMsg (Decode.field "key" Decode.string))
     Launch _ -> onAnimationFrame (\_ -> Frame)
+    Win -> onKeyDown (Decode.succeed WinContinue)
 
 keyToMenuMsg : String -> Msg
 keyToMenuMsg key =
@@ -221,6 +222,7 @@ type alias Model = { state : GameState
 type GameState = Menu MenuSelection
                | Aim AimModel
                | Launch LaunchModel
+               | Win
 type MenuSelection = NewGame | Continue
 type alias AimModel = { level : Int
                       , currentPosition : Point
@@ -247,6 +249,7 @@ type Msg
   | AimRight
   | AimLaunch
   | KeyOther
+  | WinContinue
   | Frame
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -286,9 +289,16 @@ update msg model =
                                                            , velocityY = (launchModelPrime.velocityY + gravity) * airResistance }
               }, Cmd.none)
       _ -> (model, Cmd.none)
+    Win -> case msg of
+      WinContinue -> (Model (Menu NewGame) 0, Cmd.none)
+      _ -> (model, Cmd.none)
 
 advanceToNextLevel : Model -> LaunchModel -> Model
-advanceToNextLevel model launchModel = { model | state = Aim (AimModel (launchModel.level + 1) (2, 58) 0) }
+advanceToNextLevel model launchModel =
+  if launchModel.level + 1 >= Array.length levels then
+    { model | state = Win }
+  else
+    { model | state = Aim (AimModel (launchModel.level + 1) (2, 58) 0) }
 
 checkCollision : Int -> Point -> Bool
 checkCollision level (floatX, floatY) =
@@ -344,6 +354,12 @@ background model =
               , text [ gameFont ] (4, 32) "Continue" ]
     Aim aimModel -> drawLevel aimModel.level
     Launch launchModel -> drawLevel launchModel.level
+    Win -> [ text [ gameFont] (16, 12) "You Win!"
+           , text [ gameFont] ( 4, 24) "Press any"
+           , text [ gameFont] ( 4, 32) "key to"
+           , text [ gameFont] ( 4, 40) "return to"
+           , text [ gameFont] ( 4, 48) "menu"
+           ]
 
 drawLevel : Int -> List Canvas.Renderable
 drawLevel levelNum = case Array.get levelNum levels of
@@ -375,6 +391,7 @@ foreground model =
      Menu menuSelection -> [ text [ gameFont ] (72, getYCoordinateFromMenuSelection menuSelection) "<" ]
      Aim aimModel -> drawMortle aimModel
      Launch launchModel -> [ shapes [ fill Color.black ] [ rect (roundPoint launchModel.currentPosition) 1 1 ] ]
+     Win -> []
 
 getYCoordinateFromMenuSelection : MenuSelection -> Float
 getYCoordinateFromMenuSelection menuSelection =
