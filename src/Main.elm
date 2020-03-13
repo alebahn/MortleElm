@@ -391,13 +391,13 @@ drawMortle aimModel =
     endY = toFloat (round (posY - aimLength * cos(aimAngle)))
   in
     shapes [ fill Color.black ] [ rect (posX - 1, posY - 1) 3 3 ] ::
-    drawLine posX posY endX endY
+    drawLine aimModel.level posX posY endX endY
 
 roundPoint : Point -> Point
 roundPoint (x, y) = (toFloat (round x), toFloat (round y))
 
-drawLine : Float -> Float -> Float -> Float -> List Canvas.Renderable
-drawLine x0 y0 x1 y1 =
+drawLine : Int -> Float -> Float -> Float -> Float -> List Canvas.Renderable
+drawLine level x0 y0 x1 y1 =
   let
     dx = abs (x1 - x0)
     dy = abs (y1 - y0)
@@ -405,11 +405,11 @@ drawLine x0 y0 x1 y1 =
     sy = if y0 < y1 then 1.0 else -1.0
     err = dx - dy
   in
-    drawLineCore x0 y0 x1 y1 dx dy sx sy err
+    drawLineCore level x0 y0 x1 y1 dx dy sx sy err
 
-drawLineCore : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> List Canvas.Renderable
-drawLineCore x0 y0 x1 y1 dx dy sx sy err =
-  invertPixel x0 y0 ::
+drawLineCore : Int -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> List Canvas.Renderable
+drawLineCore level x0 y0 x1 y1 dx dy sx sy err =
+  invertPixel level (x0, y0) ::
   if (x0 == x1) && (y0 == y1)
     then
       []
@@ -427,7 +427,15 @@ drawLineCore x0 y0 x1 y1 dx dy sx sy err =
           else
             (y0, newErr)
       in
-        drawLineCore newX0 newY0 x1 y1 dx dy sx sy newNewErr
+        drawLineCore level newX0 newY0 x1 y1 dx dy sx sy newNewErr
 
-invertPixel : Float -> Float -> Canvas.Renderable
-invertPixel x y = shapes [ fill Color.black ] [ rect (x, y) 1 1 ]
+invertPixel : Int -> Point -> Canvas.Renderable
+invertPixel level point =
+  let
+    fillColor =
+      if checkCollision level point then
+        Color.white
+      else
+        Color.black
+  in
+    shapes [ fill fillColor ] [ rect point 1 1 ]
