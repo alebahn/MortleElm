@@ -6,7 +6,7 @@ import Browser.Events exposing (onKeyDown, onAnimationFrame)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Canvas exposing (clear, shapes, rect, text, Point)
-import Canvas.Settings exposing (Setting, fill)
+import Canvas.Settings exposing (Setting, fill, stroke)
 import Canvas.Settings.Text exposing (font)
 import Color
 import Json.Decode as Decode
@@ -288,7 +288,7 @@ update msg model =
       _ -> (model, Cmd.none)
 
 advanceToNextLevel : Model -> LaunchModel -> Model
-advanceToNextLevel model launchModel = { model | state = Aim (AimModel (launchModel.level + 1) (2, 58) launchModel.aimAngle) }
+advanceToNextLevel model launchModel = { model | state = Aim (AimModel (launchModel.level + 1) (2, 58) 0) }
 
 checkCollision : Int -> Point -> Bool
 checkCollision level (floatX, floatY) =
@@ -347,8 +347,8 @@ background model =
 
 drawLevel : Int -> List Canvas.Renderable
 drawLevel levelNum = case Array.get levelNum levels of
-   Nothing -> []
-   Just level -> Array.foldl (++) [] (Array.indexedMap drawRow level)
+  Nothing -> []
+  Just level -> Array.foldl (++) [] (Array.indexedMap drawRow level) ++ drawDoor
 
 drawRow : Int -> Array Bool -> List Canvas.Renderable
 drawRow rowNum row = Array.foldl (++) [] (Array.indexedMap (drawCell rowNum) row)
@@ -359,6 +359,12 @@ drawCell rowNum colNum cell =
     [shapes [ fill Color.black ] [ rect (toFloat colNum * 5, toFloat rowNum * 5) 5 5] ]
   else
     []
+
+drawDoor : List Canvas.Renderable
+drawDoor =
+  [ shapes [ stroke Color.black ] [ rect (90.5, 55.5) 4 4 ]
+  , shapes [ fill Color.black] [ rect (93, 57) 1 1 ]
+  ]
 
 clearScreen : Canvas.Renderable
 clearScreen = clear ( 0, 0 ) (toFloat width) (toFloat height)
