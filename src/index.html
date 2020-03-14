@@ -22,8 +22,12 @@
           google: { families: ['Press Start 2P'] },
           active: function () {
             var app = Elm.Main.init({
-              node: document.getElementById('elm')
+              node: document.getElementById('elm'),
+              flags: +localStorage.getItem("currentLevel")
             }); 
+            app.ports.saveLevel.subscribe(function(level) {
+              localStorage.setItem("currentLevel", level);
+            });
           }
         });
       }
