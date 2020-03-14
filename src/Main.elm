@@ -5,6 +5,7 @@ import Browser
 import Browser.Events exposing (onKeyDown, onAnimationFrame)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
+import Html.Lazy exposing (lazy)
 import Canvas exposing (clear, shapes, rect, text, Point)
 import Canvas.Settings exposing (Setting, fill, stroke)
 import Canvas.Settings.Text exposing (font)
@@ -240,6 +241,7 @@ type alias LaunchModel = { level : Int
                          , aimAngle : Float
                          }
 
+
 init : Flags -> (Model, Cmd Msg)
 init continueLevel =
   (Model (Menu NewGame) continueLevel, Cmd.none)
@@ -348,29 +350,58 @@ height = 60
 
 view : Model -> Html Msg
 view model =
-  Canvas.toHtml
+  Html.div [ class "gameContainer" ]
+  [ lazy backgroundCanvas (modelToBackgroundModel model)
+  , Canvas.toHtml
       ( width, height )
-      [ class "gameCanvas"]
-      (background model ++ foreground model)
+      [ class "foreground"]
+      (foreground model)
+  ]
 
 gameFont : Setting
 gameFont = font {size = 8, family = "'Press Start 2P'"}
 
-background : Model -> List Canvas.Renderable
+type alias BackgroundModel = Int
+
+menuScreen : BackgroundModel
+menuScreen = -1
+levelScreen : Int -> BackgroundModel
+levelScreen level = level
+winScreen : BackgroundModel
+winScreen = -2
+
+modelToBackgroundModel : Model -> BackgroundModel
+modelToBackgroundModel model =
+  case model.state of
+    Menu _ -> menuScreen
+    Aim aimModel -> levelScreen aimModel.level
+    Launch launchModel -> levelScreen launchModel.level
+    Win -> winScreen
+
+backgroundCanvas : BackgroundModel -> Html Msg
+backgroundCanvas model =
+  Canvas.toHtml
+        ( width, height )
+        [ class "background"]
+        (background model)
+
+background : BackgroundModel -> List Canvas.Renderable
 background model =
   clearScreen ::
-  case model.state of
-    Menu _ -> [ text [ gameFont ] (24, 12) "MORTLE"
-              , text [ gameFont ] (4, 24) "New Game"
-              , text [ gameFont ] (4, 32) "Continue" ]
-    Aim aimModel -> drawLevel aimModel.level
-    Launch launchModel -> drawLevel launchModel.level
-    Win -> [ text [ gameFont] (16, 12) "You Win!"
-           , text [ gameFont] ( 4, 24) "Press any"
-           , text [ gameFont] ( 4, 32) "key to"
-           , text [ gameFont] ( 4, 40) "return to"
-           , text [ gameFont] ( 4, 48) "menu"
-           ]
+  if model == menuScreen then
+    [ text [ gameFont ] (24, 12) "MORTLE"
+    , text [ gameFont ] (4, 24) "New Game"
+    , text [ gameFont ] (4, 32) "Continue"
+    ]
+  else if model == winScreen then
+    [ text [ gameFont] (16, 12) "You Win!"
+    , text [ gameFont] ( 4, 24) "Press any"
+    , text [ gameFont] ( 4, 32) "key to"
+    , text [ gameFont] ( 4, 40) "return to"
+    , text [ gameFont] ( 4, 48) "menu"
+    ]
+  else
+    drawLevel model
 
 drawLevel : Int -> List Canvas.Renderable
 drawLevel levelNum = case Array.get levelNum levels of
@@ -398,6 +429,7 @@ clearScreen = clear ( 0, 0 ) (toFloat width) (toFloat height)
 
 foreground : Model -> List Canvas.Renderable
 foreground model =
+  clearScreen ::
   case model.state of
      Menu menuSelection -> [ text [ gameFont ] (72, getYCoordinateFromMenuSelection menuSelection) "<" ]
      Aim aimModel -> drawMortle aimModel
