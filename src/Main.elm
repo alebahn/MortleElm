@@ -163,6 +163,10 @@ levels = Array.map (\listList -> Array.map Array.fromList (Array.fromList listLi
   ])
 
 -- CONSTANTS
+width : Int
+width = 95
+height : Int
+height = 60
 
 aimLength : Float
 aimLength = 6
@@ -177,7 +181,6 @@ gravity : Float
 gravity = 0.025
 
 -- MAIN
-
 main : Program Flags Model Msg
 main =
   Browser.element
@@ -186,7 +189,6 @@ main =
   , update = update, view = view }
 
 -- PORTS
-
 port saveLevel : Int -> Cmd msg
 
 -- SUBSCRIPTIONS
@@ -262,43 +264,18 @@ type Msg
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case model.state of
-    Menu menuSelection -> case msg of
-       MenuUp -> ({ model | state = Menu NewGame }, Cmd.none)
-       MenuDown -> ({ model | state = Menu Continue }, Cmd.none)
-       MenuAccept -> ({ model | state = Aim (AimModel (getStartLevel model.startLevel menuSelection) (2, 58) 0) }, Cmd.none)
-       _ -> (model, Cmd.none)
-    Aim aimModel -> case msg of
-      AimLeft -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle - angleDelta }}, Cmd.none)
-      AimRight -> ({ model | state = Aim { aimModel | aimAngle = aimModel.aimAngle + angleDelta }}, Cmd.none)
-      AimLaunch -> ({ model | state = Launch (LaunchModel aimModel.level aimModel.currentPosition (sin aimModel.aimAngle) -(cos aimModel.aimAngle) aimModel.aimAngle) }, Cmd.none)
-      _ -> (model, Cmd.none)
-    Launch launchModel -> case msg of
-      Frame ->
-        let
-          (currentX, currentY) = launchModel.currentPosition
-          level = launchModel.level
-        in
-          if currentX >= 90 && currentY >= 55 then
-            advanceToNextLevel model launchModel
-          else if checkCollision level (currentX, currentY + 1) then
-            ({ model | state = Aim (AimModel level (roundPoint (currentX, currentY - 1)) launchModel.aimAngle) }, Cmd.none)
-          else
-            let
-              launchModelPrime =
-                if (checkCollision level (currentX, currentY - 1) && launchModel.velocityY < 0) then
-                  { launchModel | velocityX = 0, velocityY = 0 }
-                else if ((checkCollision level (currentX - 1, currentY)) && launchModel.velocityX < 0 ) ||
-                        ((checkCollision level (currentX + 1, currentY)) && launchModel.velocityX > 0) then
-                  { launchModel | velocityX = -launchModel.velocityX }
-                else launchModel
-            in
-              ({ model | state = Launch { launchModelPrime | currentPosition = (currentX + launchModelPrime.velocityX, currentY + launchModelPrime.velocityY)
-                                                           , velocityY = (launchModelPrime.velocityY + gravity) * airResistance }
-              }, Cmd.none)
-      _ -> (model, Cmd.none)
-    Win -> case msg of
-      WinContinue -> (Model (Menu NewGame) (Array.length levels - 1), Cmd.none)
-      _ -> (model, Cmd.none)
+    Menu menuSelection -> (updateMenu msg model menuSelection, Cmd.none)
+    Aim aimModel -> (updateAim msg model aimModel, Cmd.none)
+    Launch launchModel -> updateLaunch msg model launchModel
+    Win -> (updateWin msg model, Cmd.none)
+
+updateMenu : Msg -> Model -> MenuSelection -> Model
+updateMenu msg model menuSelection =
+  case msg of
+    MenuUp -> { model | state = Menu NewGame }
+    MenuDown -> { model | state = Menu Continue }
+    MenuAccept -> { model | state = Aim (AimModel (getStartLevel model.startLevel menuSelection) (2, 58) 0) }
+    _ -> model
 
 getStartLevel : Int -> MenuSelection -> Int
 getStartLevel continueLevel menuSelection =
@@ -306,12 +283,65 @@ getStartLevel continueLevel menuSelection =
     NewGame -> 0
     Continue -> continueLevel
 
+updateAim : Msg -> Model -> AimModel -> Model
+updateAim msg model aimModel =
+  case msg of
+    AimLeft -> { model | state = Aim { aimModel | aimAngle = aimModel.aimAngle - angleDelta }}
+    AimRight -> { model | state = Aim { aimModel | aimAngle = aimModel.aimAngle + angleDelta }}
+    AimLaunch -> { model | state = Launch (LaunchModel aimModel.level aimModel.currentPosition (sin aimModel.aimAngle) -(cos aimModel.aimAngle) aimModel.aimAngle) }
+    _ -> model
+
+updateLaunch : Msg -> Model -> LaunchModel -> (Model, Cmd Msg)
+updateLaunch msg model launchModel =
+    case msg of
+      Frame -> updateLaunchCore model launchModel
+      _ -> (model, Cmd.none)
+
+updateLaunchCore : Model -> LaunchModel -> (Model, Cmd Msg)
+updateLaunchCore model launchModel =
+  let
+    (currentX, currentY) = launchModel.currentPosition
+    level = launchModel.level
+  in
+    if currentX >= 90 && currentY >= 55 then advanceToNextLevel model launchModel
+    else if checkCollision level (down launchModel.currentPosition) then
+      ({ model | state = Aim (AimModel level (roundPoint (currentX, currentY - 1)) launchModel.aimAngle) }, Cmd.none)
+    else
+      let
+        launchModelPrime = checkCollisionsLeftRightUp launchModel
+      in
+        ({ model | state = Launch { launchModelPrime | currentPosition = (currentX + launchModelPrime.velocityX, currentY + launchModelPrime.velocityY)
+                                                     , velocityY = (launchModelPrime.velocityY + gravity) * airResistance }
+         }
+        , Cmd.none)
+
 advanceToNextLevel : Model -> LaunchModel -> (Model, Cmd Msg)
 advanceToNextLevel model launchModel =
   if launchModel.level + 1 >= Array.length levels then
     ({ model | state = Win }, Cmd.none)
   else
     ({ model | state = Aim (AimModel (launchModel.level + 1) (2, 58) 0) }, saveLevel (launchModel.level + 1))
+
+checkCollisionsLeftRightUp : LaunchModel -> LaunchModel
+checkCollisionsLeftRightUp launchModel =
+  if checkCollision launchModel.level (up launchModel.currentPosition) && launchModel.velocityY < 0 then
+    { launchModel | velocityX = 0, velocityY = 0 }
+  else if (checkCollision launchModel.level (left launchModel.currentPosition) && launchModel.velocityX < 0 ) ||
+          (checkCollision launchModel.level (right launchModel.currentPosition) && launchModel.velocityX > 0) then
+    { launchModel | velocityX = -launchModel.velocityX }
+  else launchModel
+
+down : Point -> Point
+down (currentX, currentY) = (currentX, currentY + 1)
+
+left : Point -> Point
+left (currentX, currentY) = (currentX - 1, currentY)
+
+right : Point -> Point
+right (currentX, currentY) = (currentX + 1, currentY)
+
+up : Point -> Point
+up (currentX, currentY) = (currentX, currentY - 1)
 
 checkCollision : Int -> Point -> Bool
 checkCollision level (floatX, floatY) =
@@ -342,12 +372,13 @@ checkCollision level (floatX, floatY) =
                   Nothing -> True
                   Just cell -> cell
 
--- VIEW
-width : Int
-width = 95
-height: Int
-height = 60
+updateWin : Msg -> Model -> Model
+updateWin msg model =
+  case msg of
+    WinContinue -> Model (Menu NewGame) (Array.length levels - 1)
+    _ -> model
 
+-- VIEW
 view : Model -> Html Msg
 view model =
   Html.div [ class "gameContainer" ]

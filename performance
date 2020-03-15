@@ -2,3 +2,6 @@
 
 before: 365.4 ms
 after: 262.3 ms
+
+typescript: 189.6 ms
+purescript 490.8 ms
